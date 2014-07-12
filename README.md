@@ -91,7 +91,7 @@ To get the IP address of the container you will need to use this command
 $ docker inspect -f "{{ .NetworkSettings.IPAddress }}" op_one
 ```
 The `-f` parameter inputs formatting options as to which data we want to extract. Without it the `inspect` command would print all of the container's top-layer system data in JSON format.
-Normally, unless that network has been allocated locally before Docker is installed, if this is your first container, the IP address should be 172.17.0.1
+Normally, unless that network has been allocated locally before Docker is installed, if this is your first container, the IP address should be something like 172.17.0.1
 
 If you have followed the instructions conserning `id_rsa.pub`, you will not have any problems authenticating, and if you generated the key without a password, you should not be prompted for one.
 
@@ -102,6 +102,8 @@ While MySQL and SQLite3 support are added in the `apt-get install` command, so y
 If you choose to use SQLite, then wherever you choose to store it's files, you MUST link that whole directory (preferably it would be /root/openproject/db/sqlite for this example) to outside the docker image or you risk losing all of your data. You would need to add an additional parameter after "docker run", but before the image name:
 `-v /var/local/openproject/sqlite:/root/openproject/db/sqlite`
 This presumes you have created the appropriate directory on your host filesystem.
+
+**SQLite3 failing**: In the current stable release 3.0.8 the SQLite migration fails due to a name being too long. You will just have to wait for that to be fixed in the main project before anything can be done, or fix it on your own, but then you cannot guarantee compatibility for the next update.
  
 If you have configured OpenProject to use/create local repositories, the place where you store those repositories must also be forwarded to the host.
 
@@ -122,9 +124,9 @@ To upgrade your OpenProject installation, ssh into your container and move the f
 Exit the container and run:
 ```bash
 $ docker stop op_one
-$ docker commit op_one openproject:3.0.10
+$ docker commit op_one openproject:3.0.11
 ```
-Presuming the next stable release will be 3.0.10
+Presuming the next stable release will be 3.0.11
 If this step is successful run:
 ```bash
 $ docker rm op_one
