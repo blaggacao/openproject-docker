@@ -22,67 +22,88 @@
 # See COPYRIGHT.md for more details.
 #++
 
-FROM stackbrew/ubuntu:13.10
+# DOCKER-VERSION 0.9.1
+FROM phusion/passenger-ruby21:latest
 
 MAINTAINER OpenProject Foundation (opf), info@openproject.org
+
 ENV DEBIAN_FRONTEND noninteractive
 
-# expose rails server port
-EXPOSE 8080
-# export ssh port; user is openproject; password will be generated and is dumped to stdout during the build
+# Get repositories
+RUN apt-get update
+
+# Install most missing things we need
+# To minimize your image you should remove database packages you don't need
+RUN apt-get -y install libxml2-dev libxslt-dev g++ libpq-dev sqlite3 ruby-sqlite3 libsqlite3-dev ruby-mysql2 libmysql++-dev && apt-get clean
+
+# Install a the bundler needed
+RUN gem install bundler --version '>=1.5.1'
+
+# Get stable version of openproject from the repository into root's home directory
+RUN cd /root && git clone https://github.com/opf/openproject.git -b stable
+
+# This build by default is PostgreSQL enabled.
+# Alter the next line as appropriate for your database setup
+RUN cd /root/openproject && bundle install --without mysql mysql2 sqlite development test rmagick
+
+# You must edit the configuration and database files before adding them
+ADD files/configuration.yml /root/openproject/config/configuration.yml 
+ADD files/database.yml /root/openproject/config/database.yml 
+
+# This replacement production.rb has enabled static resources.
+# The default production version would expect them to be on another server
+# and your build would be broken
+RUN rm /root/openproject/config/environments/production.rb
+ADD files/production.rb /root/openproject/config/environments/production.rb
+
+#ADD files/Gemfile.plugins /root/openproject/Gemfile.plugins
+
+# The next line must be uncommented to use sqlite storage outside the container
+#RUN mkdir /root/openproject/db/sqlite
+
+# Default installation steps as described in OpenProject's wiki
+RUN cd /root/openproject && bundle exec rake generate_secret_token
+RUN cd /root/openproject && bundle exec rake db:create:all
+#RUN touch /root/openproject/db/sqlite/production.db
+RUN cd /root/openproject && bundle exec rake db:migrate db:seed RAILS_ENV=production
+RUN cd /root/openproject && bundle exec rake assets:precompile
+
+# These directories will be linked outside the docker for easy access and persistent storage
+RUN rm -R /root/openproject/log
+RUN rm -R /root/openproject/files
+
+# Regenerate SSH host keys. baseimage-docker does not contain any, so you
+# have to do that yourself. You may also comment out this instruction; the
+# init system will auto-generate one during boot.
+RUN /etc/my_init.d/00_regen_ssh_host_keys.sh
+
+# id_rsa.pub must first be copied from ~/.ssh/id_rsa.pub
+# If you do not have this file, you should run ssh-keygen
+# Without this step you will be unable to identify when connecting via ssh
+ADD id_rsa.pub /tmp/your_key.pub
+RUN cat /tmp/your_key.pub >> /root/.ssh/authorized_keys && rm -f /tmp/your_key.pub
+
+# The default service port 3000 can be changed in the file /root/openproject/config/settings.yml
 EXPOSE 22
+EXPOSE 3000
 
-#
-# Install ruby and its dependencies
-#
-# RUN echo "deb http://archive.ubuntu.com/ubuntu saucy main universe" > /etc/apt/sources.list
-RUN apt-get update -q
-RUN locale-gen en_US en_US.UTF-8
-RUN apt-get install -y --force-yes build-essential curl git zlib1g-dev libssl-dev libreadline-dev libyaml-dev libxml2-dev libxslt-dev libxslt1-dev libmysqlclient-dev libpq-dev libsqlite3-dev libyaml-0-2 libmagickwand-dev libmagickcore-dev libmagickcore5-extra libgraphviz-dev libgvc5 ruby-dev
+# Add the startup script that Phusion Passenger will run
+RUN mkdir /etc/service/openproject
+ADD files/run.sh /etc/service/openproject/run
 
-# Install utilities
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 561F9B9CAC40B2F7
-# Add HTTPS support for APT. Passengers APT repository is stored on an HTTPS server.
-RUN apt-get install -q -y --force-yes apt-transport-https ca-certificates
-RUN echo 'deb https://oss-binaries.phusionpassenger.com/apt/passenger saucy main' > /etc/apt/sources.list.d/passenger.list
-RUN chown root: /etc/apt/sources.list.d/passenger.list
-RUN chmod 600 /etc/apt/sources.list.d/passenger.list
-RUN apt-get update -q
-RUN apt-get install -q -y --force-yes memcached subversion vim wget python-setuptools openssh-server sudo pwgen libcurl4-openssl-dev passenger
-RUN easy_install supervisor
-RUN mkdir /var/log/supervisor/
+# Minimize the image by removing apt repos.
+RUN rm -r /var/cache/apt /var/lib/apt/lists
 
-# see: http://flnkr.com/2013/12/creating-a-docker-ubuntu-13-10-image-with-openssh/
-RUN mkdir /var/run/sshd
-RUN /usr/sbin/sshd
-RUN sed -i 's/.*session.*required.*pam_loginuid.so.*/session optional pam_loginuid.so/g' /etc/pam.d/sshd
-RUN /bin/echo -e "LANG=\"en_US.UTF-8\"" > /etc/default/local
+# Minimize the image by removing apt repos.
+RUN rm -r /var/cache/apt /var/lib/apt/lists
+# Using Phusion docker image's init system.
+# It is highly recommended you use only it
+CMD ["/sbin/my_init"]
 
-#
-# Install MySQL
-#
-# RUN apt-get -y --force-yes -q install postgresql postgresql-client postgresql-contrib
-RUN apt-get install -y --force-yes -q mysql-client mysql-server
+# To build and run use the following commands in the directory
+# ONLY AFTER(!!!) you have made and copied your id_rsa.pub file
+# in this directory and created /var/log/openproject and /var/local/openproject
+# or whatever equivalents you wish to replace them with.
+# docker build -t openproject:3.0.8 .
+# docker run -v /var/log/openproject:/root/openproject/log -v /var/local/openproject/files:/root/openproject/files --name proj_server --hostname ProjServ -d openproject:3.0.8
 
-RUN apt-get clean
-
-#
-# Setup OpenProject
-#
-ENV CONFIGURE_OPTS --disable-install-doc
-ADD ./files/Gemfile.local /Gemfile.local
-ADD ./files/Gemfile.plugins /Gemfile.plugins
-ADD ./files/setup_system.sh /setup_system.sh
-RUN /bin/bash /setup_system.sh
-RUN rm /setup_system.sh
-ENV PATH /home/openproject/.rbenv/bin:$PATH
-ADD ./files/passenger-standalone.json /home/openproject/openproject/passenger-standalone.json
-ADD ./files/start_openproject.sh /home/openproject/start_openproject.sh
-ADD ./files/start_openproject_worker.sh /home/openproject/start_openproject_worker.sh
-
-#
-# And, finally, launch supervisord in foreground mode.
-#
-ADD ./files/supervisord.conf /etc/supervisord.conf
-ENTRYPOINT ["supervisord", "-n"]
-RUN echo "INFO: openproject ssh password: `cat /root/openproject-root-pw.txt`"
