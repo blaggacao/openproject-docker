@@ -97,6 +97,10 @@ If you have followed the instructions conserning `id_rsa.pub`, you will not have
 
 ## Further thoughts
 
+### Setting timezone for accurate logs
+Typically a docker container runs with the system clock, believing that it's set to UTC and that your server is running in that timezone, thus all timestamps in the logs will be printed under that assumption. A simple way to change this is to fire-up an SSH connection and go to `/etc`. Delete `localtime` and replace it with a symbolic link to the right file from `/usr/share/zoneinfo/`, then edit your timezone file with `nano` or your preferred editor.
+To be sure all your processes take in the new settings, exit the SSH session and restart the container using `docker restart`.
+
 ### Persistence notes
 While MySQL and SQLite3 support are added in the `apt-get install` command, so you don't need to search for them, they are disabled later on. To enable them you must edit Dockerfile where it calls `bundle install`. You may remove `mysql2` and `sqlite` from the `without` list, and you may add `postgresql` (or it might be `pgsql`, that is untested).
 If you choose to use SQLite, then wherever you choose to store it's files, you MUST link that whole directory (preferably it would be /root/openproject/db/sqlite for this example) to outside the docker image or you risk losing all of your data. You would need to add an additional parameter after "docker run", but before the image name:
