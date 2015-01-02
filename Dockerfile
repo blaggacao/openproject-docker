@@ -44,18 +44,21 @@ rm -f /etc/nginx/sites-available/default
 
 # Install most missing things we need
 # To minimize your image you should remove database packages you don't need
-RUN apt-get install curl zlib1g-dev libssl-dev libreadline-dev \
+RUN apt-get install -y curl zlib1g-dev libssl-dev libreadline-dev \
 libyaml-dev libsqlite3-dev sqlite3 libmysqlclient-dev libpq-dev libxml2-dev libxslt1-dev libcurl4-openssl-dev \
 python-software-properties memcached libgdbm-dev libncurses5-dev automake libtool bison libffi-dev && \
 apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 
 USER app
-WORKDIR ~
+WORKDIR /home/app
 
 RUN git clone https://github.com/opf/openproject.git -b stable --depth 1
 
 WORKDIR openproject
+USER root
+RUN gem update
+USER app
 RUN bundle install && \
 npm install && \
 bower install
