@@ -29,12 +29,12 @@
 # MySQL (default setup).
 
 production:
-  adapter: postgresql
+  adapter: slite3
   database: openproject
  #default docker host, althought it is supposedly random, it can be set to static
  #by editing /etc/default/docker.io and adding the following line (not as a comment)
  #DOCKER_OPTS="--bip=172.17.42.1/16"
-  host: 172.17.42.1
+  host: localhost
   username: root
   password:
   encoding: utf8
