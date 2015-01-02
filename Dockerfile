@@ -56,10 +56,10 @@ WORKDIR /home/app
 RUN git clone https://github.com/opf/openproject.git -b stable --depth 1
 
 WORKDIR openproject
-USER root
-RUN gem update
-USER app
-RUN bundle install && \
+# USER root
+# RUN gem update
+# USER app
+RUN bundle install --path vendor/bundle && \
 npm install && \
 bower install
 
